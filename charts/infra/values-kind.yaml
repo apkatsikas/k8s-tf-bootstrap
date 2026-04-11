@@ -1,0 +1,7 @@
+kind: true
+
+hostname: api.localhost
+
+certIssuer:
+  name: selfsigned
+  email: ""

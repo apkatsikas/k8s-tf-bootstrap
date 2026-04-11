@@ -1,0 +1,14 @@
+# kind: true enables the EnvoyProxy patch that maps host ports 80/443 into
+# the cluster, which is required for local development with KIND.
+# On GKE (and any cloud provider) this must be false — Envoy Gateway will
+# create a LoadBalancer Service and GKE will auto-provision a cloud load
+# balancer with a dynamic IP. external-dns manages the DNS record automatically.
+kind: false
+
+# Your domain name, e.g. api.yourdomain.link
+hostname: ""
+
+certIssuer:
+  name: letsencrypt
+  # Your email address — Let's Encrypt sends expiry notifications here.
+  email: ""

@@ -1,0 +1,19 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.certIssuer.name }}
+spec:
+  {{- if eq .Values.certIssuer.name "letsencrypt" }}
+  acme:
+    # Swap in the staging URL while testing to avoid production rate limits:
+    # https://acme-staging-v02.api.letsencrypt.org/directory
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: {{ .Values.certIssuer.email }}
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+    - http01:
+        gatewayHTTPRoute: {}
+  {{- else }}
+  selfSigned: {}
+  {{- end }}

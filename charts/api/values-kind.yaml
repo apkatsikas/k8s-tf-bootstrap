@@ -1,0 +1,9 @@
+image:
+  # KIND loads images directly into the cluster — no registry needed.
+  # pullPolicy: Never ensures Kubernetes never tries to pull from a registry,
+  # which would fail since the image only exists locally.
+  repository: api
+  tag: dev
+  pullPolicy: Never
+
+hostname: api.localhost

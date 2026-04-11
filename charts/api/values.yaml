@@ -1,0 +1,12 @@
+image:
+  # For GKE, set this to your Artifact Registry path.
+  # Get the value from: terraform -chdir=terraform output -raw registry_url
+  # Example: us-central1-docker.pkg.dev/my-project/api
+  repository: ""
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Your domain name, e.g. api.yourdomain.link
+hostname: ""
+
+namespace: api

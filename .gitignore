@@ -1,0 +1,11 @@
+node_modules
+
+# Terraform — tfvars may contain project IDs, never commit
+terraform/*.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfstate.*
+!terraform/terraform.tfvars.example
+terraform/.terraform.tfstate.lock.info

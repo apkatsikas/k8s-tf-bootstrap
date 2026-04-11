@@ -1,0 +1,14 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — it may contain sensitive project IDs.
+#
+# Usage:
+#   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+#   # edit terraform.tfvars
+#   cd terraform && terraform init && terraform apply
+
+project_id   = "your-gcp-project-id"
+region       = "us-central1"
+zone         = "us-central1-a"
+cluster_name = "k8s-experiment"
+domain       = "yourdomain.com"
+email        = "you@example.com"
