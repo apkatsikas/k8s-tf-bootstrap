@@ -3,13 +3,13 @@ kind: Gateway
 metadata:
   name: gateway
   namespace: envoy-gateway-system
-  annotations:
-    cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
+  # annotations:
+  #   cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
 spec:
   gatewayClassName: eg
   listeners:
   - name: http
-    port: 80
+    port: 81
     protocol: HTTP
     allowedRoutes:
       namespaces:

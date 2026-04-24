@@ -24,4 +24,3 @@ spec:
     - name: solver
       port: 80
       protocol: HTTP
-      hostname: {{ .Values.hostname }}
