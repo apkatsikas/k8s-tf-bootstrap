@@ -1,6 +1,7 @@
 CLUSTER_NAME          := kind-app
-ENVOY_GATEWAY_VERSION := v1.7.1
-CERT_MANAGER_VERSION  := v1.20.0
+GKE_CLUSTER_NAME      ?= $(shell terraform -chdir=terraform output -raw cluster_name 2>/dev/null)
+ENVOY_GATEWAY_VERSION := v1.8.0-rc.0
+CERT_MANAGER_VERSION  := v1.20.2
 EXTERNAL_DNS_VERSION  := 1.20.0
 
 # GKE settings — auto-derived from terraform outputs when not set explicitly.
@@ -86,8 +87,8 @@ install-external-dns:
 		--namespace external-dns \
 		--create-namespace \
 		-f charts/external-dns-values.yaml \
-		--set txtOwnerId=$(CLUSTER_NAME) \
-		--set "extraArgs={--google-project=$(PROJECT_ID)}" \
+		--set txtOwnerId=$(GKE_CLUSTER_NAME) \
+		--set "extraArgs={--google-project=$(PROJECT_ID),--gateway-listener-sets}" \
 		--set 'serviceAccount.annotations.iam\.gke\.io/gcp-service-account=external-dns@$(PROJECT_ID).iam.gserviceaccount.com' \
 		--wait
 

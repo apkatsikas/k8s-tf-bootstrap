@@ -14,14 +14,17 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
-  - name: https
-    hostname: {{ .Values.hostname }}
-    port: 443
-    protocol: HTTPS
-    tls:
-      mode: Terminate
-      certificateRefs:
-        - name: api-tls
-    allowedRoutes:
-      namespaces:
-        from: All
+  allowedListeners:
+    namespaces:
+      from: All
+  # - name: https
+  #   hostname: {{ .Values.hostname }}
+  #   port: 443
+  #   protocol: HTTPS
+  #   tls:
+  #     mode: Terminate
+  #     certificateRefs:
+  #       - name: api-tls
+  #   allowedRoutes:
+  #     namespaces:
+  #       from: All

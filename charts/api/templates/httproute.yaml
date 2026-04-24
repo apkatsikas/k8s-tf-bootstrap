@@ -5,12 +5,13 @@ metadata:
   namespace: {{ .Values.namespace }}
 spec:
   parentRefs:
-  - name: gateway
-    namespace: envoy-gateway-system
-    # restrict to the https listener so the http listener
-    # can handle the HTTP→HTTPS redirect independently. Without sectionName the
-    # route binds to all listeners and wins over the redirect on port 80.
-    sectionName: https
+  - kind: ListenerSet
+    name: api
+    namespace: {{ .Values.namespace }}
+    # # restrict to the https listener so the http listener
+    # # can handle the HTTP→HTTPS redirect independently. Without sectionName the
+    # # route binds to all listeners and wins over the redirect on port 80.
+    # sectionName: https
   hostnames:
   - {{ .Values.hostname }}
   rules:

@@ -10,3 +10,6 @@ image:
 hostname: ""
 
 namespace: api
+
+certIssuer:
+  name: letsencrypt

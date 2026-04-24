@@ -1,0 +1,27 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: api
+  namespace: {{ .Values.namespace }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
+spec:
+  parentRef:
+    name: gateway
+    namespace: envoy-gateway-system
+  listeners:
+    - name: api
+      hostname: {{ .Values.hostname }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: api-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: solver
+      port: 80
+      protocol: HTTP
+      hostname: {{ .Values.hostname }}

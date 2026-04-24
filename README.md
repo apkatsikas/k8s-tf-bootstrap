@@ -94,15 +94,19 @@ gcloud domains registrations register yourdomain.com --project=$PROJECT_ID
 ### Deploy
 
 1. `export PROJECT_ID=your-gcp-project-id`
-2. `gcloud auth login`
-3. `gcloud auth application-default login`
+2. `gcloud auth login --no-launch-browser`
+3. `gcloud auth application-default login --no-launch-browser`
 4. `gcloud config set project $PROJECT_ID`
 5. `gcloud auth application-default set-quota-project $PROJECT_ID`
 6. Fill in `terraform/terraform.tfvars`
 7. `make terraform-init`
 8. `make terraform-plan`
-9. `make terraform-apply` — provisions cluster, registry, Cloud DNS zone, syncs nameservers
-10. `make gke-all PROJECT_ID=$PROJECT_ID`
+9. If the Cloud DNS zone already exists outside of Terraform state (e.g. from a previous run):
+   ```bash
+   terraform -chdir=terraform import google_dns_managed_zone.main andrewkatsikas-com
+   ```
+10. `make terraform-apply` — provisions cluster, registry, Cloud DNS zone, syncs nameservers
+11. `make gke-all PROJECT_ID=$PROJECT_ID`
     > After deploy, external-dns creates the DNS A record (~1 min) and cert-manager issues the TLS cert (~2 min):
     >
     > ```bash
