@@ -21,6 +21,3 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
-    - name: solver
-      port: 80
-      protocol: HTTP

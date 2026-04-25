@@ -8,11 +8,12 @@ metadata:
 spec:
   gatewayClassName: eg
   listeners:
-  - name: http
-    port: 81
+  - name: solver
+    port: 80
     protocol: HTTP
     allowedRoutes:
       namespaces:
+        # TODO - from cert-manager specific namespace?
         from: All
   allowedListeners:
     namespaces:

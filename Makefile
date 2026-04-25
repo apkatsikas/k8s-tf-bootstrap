@@ -2,6 +2,7 @@ CLUSTER_NAME          := kind-app
 GKE_CLUSTER_NAME      ?= $(shell terraform -chdir=terraform output -raw cluster_name 2>/dev/null)
 ENVOY_GATEWAY_VERSION := v1.8.0-rc.0
 CERT_MANAGER_VERSION  := v1.20.2
+CERT_MANAGER_SRC      ?= /home/drew/cert-manager
 EXTERNAL_DNS_VERSION  := 1.20.0
 
 # GKE settings — auto-derived from terraform outputs when not set explicitly.
@@ -96,9 +97,14 @@ gke-configure:
 	bash -c "$$(terraform -chdir=terraform output -raw configure_docker)"
 	bash -c "$$(terraform -chdir=terraform output -raw configure_kubectl)"
 
+install-cert-manager-dev:
+	cd $(CERT_MANAGER_SRC) && make ko-deploy-certmanager \
+		KO_REGISTRY=$(REGISTRY) \
+		KO_HELM_VALUES_FILES=$(PWD)/charts/cert-manager-values.yaml
+
 # Install Envoy Gateway, cert-manager, and external-dns into the GKE cluster.
 # Requires PROJECT_ID to be set.
-gke-init: install-envoy-gateway install-cert-manager install-external-dns
+gke-init: install-envoy-gateway install-cert-manager-dev install-external-dns
 
 gke-push:
 	docker build -t $(REGISTRY)/api:$(IMAGE_TAG) .
