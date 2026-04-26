@@ -4,7 +4,9 @@ metadata:
   name: api
   namespace: {{ .Values.namespace }}
   annotations:
-    acme.cert-manager.io/http01-parentref-fallback: "true"
+    # TODO - conditionalize this for both not needed for KIND
+    # and only if cert issuer is this type
+    acme.cert-manager.io/http01-parentreffallback: "true"
     cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
 spec:
   parentRef:
