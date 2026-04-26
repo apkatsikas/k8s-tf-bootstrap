@@ -4,6 +4,7 @@ metadata:
   name: api
   namespace: {{ .Values.namespace }}
   annotations:
+    acme.cert-manager.io/http01-parentref-fallback: "true"
     cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
 spec:
   parentRef:
