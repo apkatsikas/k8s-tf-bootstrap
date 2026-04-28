@@ -153,6 +153,18 @@ gke-deploy:
 		--set image.tag=$(IMAGE_TAG) \
 		--set hostname=$(HOSTNAME) \
 		--wait
+	# Wait for the LB to be fully ready before returning. cert-manager starts the
+	# HTTP-01 challenge almost immediately after deploy — if it fires before the
+	# LB is healthy, LE gets a TCP timeout and cert-manager backs off for an hour.
+	# First we wait for EG to assign an IP, then we poll until the LB is actually
+	# forwarding traffic (curl 000 = no TCP connection; any HTTP response means ready).
+	# TODO: ideally cert-manager would add a retry delay before attempting the
+	# challenge after initial provisioning, making this workaround unnecessary.
+	kubectl wait gateway/gateway -n envoy-gateway-system \
+		--for=jsonpath='{.status.addresses[0].value}' \
+		--timeout=120s
+	@echo "Waiting for LoadBalancer to accept connections..."
+	@until curl -o /dev/null -s --max-time 5 -w '%{http_code}' http://$(HOSTNAME)/ | grep -qv "^000"; do sleep 5; done
 
 gke-all: gke-configure gke-init gke-push gke-deploy
 
