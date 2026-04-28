@@ -148,11 +148,6 @@ gke-deploy:
 		--set hostname=$(HOSTNAME) \
 		--set certIssuer.email=$(LE_EMAIL) \
 		--wait
-	helm upgrade --install api ./charts/api \
-		--set image.repository=$(REGISTRY)/api \
-		--set image.tag=$(IMAGE_TAG) \
-		--set hostname=$(HOSTNAME) \
-		--wait
 	# Wait for the LB to be fully ready before returning. cert-manager starts the
 	# HTTP-01 challenge almost immediately after deploy — if it fires before the
 	# LB is healthy, LE gets a TCP timeout and cert-manager backs off for an hour.
@@ -165,6 +160,11 @@ gke-deploy:
 		--timeout=120s
 	@echo "Waiting for LoadBalancer to accept connections..."
 	@until curl -o /dev/null -s --max-time 5 -w '%{http_code}' http://$(HOSTNAME)/ | grep -qv "^000"; do sleep 5; done
+	helm upgrade --install api ./charts/api \
+		--set image.repository=$(REGISTRY)/api \
+		--set image.tag=$(IMAGE_TAG) \
+		--set hostname=$(HOSTNAME) \
+		--wait
 
 gke-all: gke-configure gke-init gke-push gke-deploy
 
