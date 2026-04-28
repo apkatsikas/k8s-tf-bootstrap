@@ -4,6 +4,8 @@ ENVOY_GATEWAY_VERSION := v1.8.0-rc.0
 CERT_MANAGER_VERSION  := v1.20.2
 CERT_MANAGER_SRC      ?= /home/drew/cert-manager
 EXTERNAL_DNS_VERSION  := 1.20.0
+ENVOY_GATEWAY_SRC ?= /home/drew/gateway
+ENVOY_GATEWAY_DEV_TAG := dev-$(shell git -C $(ENVOY_GATEWAY_SRC) rev-parse --short HEAD)
 
 # GKE settings — auto-derived from terraform outputs when not set explicitly.
 # IMAGE_TAG defaults to latest; use a git SHA for real deploys.
@@ -13,6 +15,20 @@ IMAGE_TAG  ?= latest
 HOSTNAME   ?= $(shell terraform -chdir=terraform output -raw hostname 2>/dev/null)
 LE_EMAIL   ?= $(shell terraform -chdir=terraform output -raw le_email 2>/dev/null)
 PROJECT_ID ?=
+
+install-envoy-gateway-kind-dev:
+	cd $(ENVOY_GATEWAY_SRC) && make image \
+			IMAGE=envoy-gateway \
+			TAG=$(ENVOY_GATEWAY_DEV_TAG)
+	kind load docker-image envoy-gateway:$(ENVOY_GATEWAY_DEV_TAG) --name $(CLUSTER_NAME)
+	helm upgrade --install eg \
+			oci://docker.io/envoyproxy/gateway-helm \
+			--version $(ENVOY_GATEWAY_VERSION) \
+			--namespace envoy-gateway-system \
+			--create-namespace \
+			--set deployment.envoyGateway.image.repository=envoy-gateway \
+			--set deployment.envoyGateway.image.tag=$(ENVOY_GATEWAY_DEV_TAG) \
+			--wait
 
 create-cluster:
 	kind get clusters | grep -q "^$(CLUSTER_NAME)$$" || kind create cluster --name $(CLUSTER_NAME) --config kind-cluster/kind.yaml
@@ -34,7 +50,7 @@ install-cert-manager:
 		-f charts/cert-manager-values.yaml \
 		--wait
 
-init: create-cluster install-envoy-gateway install-cert-manager
+init: create-cluster install-envoy-gateway-kind-dev install-cert-manager
 
  # Run npm install via Docker to update package-lock.json without needing Node installed locally.
 install-node-modules:
@@ -97,6 +113,20 @@ gke-configure:
 	bash -c "$$(terraform -chdir=terraform output -raw configure_docker)"
 	bash -c "$$(terraform -chdir=terraform output -raw configure_kubectl)"
 
+install-envoy-gateway-gke-dev:
+	cd $(ENVOY_GATEWAY_SRC) && make image \
+		IMAGE=$(REGISTRY)/envoy-gateway \
+		TAG=$(ENVOY_GATEWAY_DEV_TAG)
+	docker push $(REGISTRY)/envoy-gateway:$(ENVOY_GATEWAY_DEV_TAG)
+	helm upgrade --install eg \
+		oci://docker.io/envoyproxy/gateway-helm \
+		--version $(ENVOY_GATEWAY_VERSION) \
+		--namespace envoy-gateway-system \
+		--create-namespace \
+		--set deployment.envoyGateway.image.repository=$(REGISTRY)/envoy-gateway \
+		--set deployment.envoyGateway.image.tag=$(ENVOY_GATEWAY_DEV_TAG) \
+		--wait
+
 install-cert-manager-dev:
 	cd $(CERT_MANAGER_SRC) && make ko-deploy-certmanager \
 		KO_REGISTRY=$(REGISTRY) \
@@ -104,7 +134,7 @@ install-cert-manager-dev:
 
 # Install Envoy Gateway, cert-manager, and external-dns into the GKE cluster.
 # Requires PROJECT_ID to be set.
-gke-init: install-envoy-gateway install-cert-manager-dev install-external-dns
+gke-init: install-envoy-gateway-gke-dev install-cert-manager-dev install-external-dns
 
 gke-push:
 	docker build -t $(REGISTRY)/api:$(IMAGE_TAG) .
@@ -130,7 +160,7 @@ gke-all: gke-configure gke-init gke-push gke-deploy
 gke-status:
 	kubectl get pods,svc,gateway,httproute -n api
 	@echo ""
-	kubectl get certificate,certificaterequest -n envoy-gateway-system
+	kubectl get certificate,certificaterequest -n api
 	@echo ""
 	kubectl get svc -n envoy-gateway-system
 	@echo ""
