@@ -1,6 +1,6 @@
 CLUSTER_NAME          := kind-app
 GKE_CLUSTER_NAME      ?= $(shell terraform -chdir=terraform output -raw cluster_name 2>/dev/null)
-ENVOY_GATEWAY_VERSION := v1.8.0-rc.0
+ENVOY_GATEWAY_VERSION := v1.8.0
 CERT_MANAGER_VERSION  := v1.20.2
 CERT_MANAGER_SRC      ?= /home/drew/cert-manager
 EXTERNAL_DNS_VERSION  := 1.20.0
@@ -29,6 +29,7 @@ install-envoy-gateway-kind-dev:
 			--set deployment.envoyGateway.image.repository=envoy-gateway \
 			--set deployment.envoyGateway.image.tag=$(ENVOY_GATEWAY_DEV_TAG) \
 			--wait
+	kubectl apply --server-side --force-conflicts -f $(ENVOY_GATEWAY_SRC)/charts/gateway-helm/charts/crds/crds/generated/
 
 create-cluster:
 	kind get clusters | grep -q "^$(CLUSTER_NAME)$$" || kind create cluster --name $(CLUSTER_NAME) --config kind-cluster/kind.yaml
