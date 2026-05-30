@@ -1,3 +1,12 @@
+repositories:
+  - name: external-dns
+    url: https://kubernetes-sigs.github.io/external-dns/
+
+environments:
+  kind: {}
+  gke: {}
+
+---
 releases:
   - name: eg
     namespace: envoy-gateway-system
@@ -19,14 +28,37 @@ releases:
       - charts/cert-manager-values.yaml
     wait: true
 
+  - name: external-dns
+    installed: {{ eq .Environment.Name "gke" }}
+    namespace: external-dns
+    createNamespace: true
+    chart: external-dns/external-dns
+    version: 1.21.1
+    labels:
+      tier: platform
+    values:
+      - charts/external-dns-values.yaml
+{{- if eq .Environment.Name "gke" }}
+      - charts/external-dns-values-gke.yaml.gotmpl
+{{- end }}
+    needs:
+      - envoy-gateway-system/eg
+      - cert-manager/cert-manager
+    wait: true
+
   - name: infra
     namespace: infra
     createNamespace: true
     chart: ./charts/infra
     labels:
       tier: app
+      name: infra
     values:
+{{- if eq .Environment.Name "kind" }}
       - charts/infra/values-kind.yaml
+{{- else }}
+      - charts/infra/values-gke.yaml.gotmpl
+{{- end }}
     needs:
       - envoy-gateway-system/eg
       - cert-manager/cert-manager
@@ -38,8 +70,13 @@ releases:
     chart: ./charts/api
     labels:
       tier: app
+      name: api
     values:
+{{- if eq .Environment.Name "kind" }}
       - charts/api/values-kind.yaml
+{{- else }}
+      - charts/api/values-gke.yaml.gotmpl
+{{- end }}
     needs:
       - infra/infra
     wait: true
