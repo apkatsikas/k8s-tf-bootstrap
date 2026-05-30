@@ -12,9 +12,3 @@ terraform {
     }
   }
 }
-
-# TODO - where could this be moved?
-provider "google" {
-  project = var.project_id
-  region  = var.region
-}
