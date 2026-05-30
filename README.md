@@ -35,6 +35,7 @@ Two Helm charts keep concerns separate:
 ├── terraform/          # GKE cluster, registry, DNS zone, IAM
 ├── src/                # Node.js application source
 ├── Dockerfile
+├── helmfile.yaml.gotmpl
 └── Makefile
 ```
 
@@ -50,6 +51,7 @@ Two Helm charts keep concerns separate:
 | [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) | Local Kubernetes cluster    |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/)                   | Talks to the cluster        |
 | [helm](https://helm.sh/docs/intro/install/)                          | Deploys the charts          |
+| [helmfile](https://helmfile.readthedocs.io/en/latest/#installation)  | Orchestrates helm releases  |
 
 ### Quick Start
 
@@ -83,6 +85,7 @@ make status  # pods, services, gateway, routes in the api namespace
 | [gcloud](https://cloud.google.com/sdk/docs/install)            | GCP CLI                   |
 | [terraform](https://developer.hashicorp.com/terraform/install) | Provisions infrastructure |
 | [helm](https://helm.sh/docs/intro/install/)                    | Deploys the charts        |
+| [helmfile](https://helmfile.readthedocs.io/en/latest/#installation) | Orchestrates helm releases |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/)             | Talks to the cluster      |
 
 Register your domain once via Cloud Domains (survives teardown):
