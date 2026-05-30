@@ -1,9 +1,8 @@
 CLUSTER_NAME          := kind-app
 GKE_CLUSTER_NAME      ?= $(shell terraform -chdir=terraform output -raw cluster_name 2>/dev/null)
-ENVOY_GATEWAY_VERSION := v1.8.0-rc.0
+ENVOY_GATEWAY_VERSION := v1.8.0
 CERT_MANAGER_VERSION  := v1.20.2
-CERT_MANAGER_SRC      ?= /home/drew/cert-manager
-EXTERNAL_DNS_VERSION  := 1.20.0
+EXTERNAL_DNS_VERSION  := 1.21.1
 
 # GKE settings — auto-derived from terraform outputs when not set explicitly.
 # IMAGE_TAG defaults to latest; use a git SHA for real deploys.
@@ -97,11 +96,6 @@ gke-configure:
 	bash -c "$$(terraform -chdir=terraform output -raw configure_docker)"
 	bash -c "$$(terraform -chdir=terraform output -raw configure_kubectl)"
 
-install-cert-manager-dev:
-	cd $(CERT_MANAGER_SRC) && make ko-deploy-certmanager \
-		KO_REGISTRY=$(REGISTRY) \
-		KO_HELM_VALUES_FILES=$(PWD)/charts/cert-manager-values.yaml
-
 # Install Envoy Gateway, cert-manager, and external-dns into the GKE cluster.
 # Requires PROJECT_ID to be set.
 gke-init: install-envoy-gateway install-cert-manager-dev install-external-dns
@@ -118,6 +112,18 @@ gke-deploy:
 		--set hostname=$(HOSTNAME) \
 		--set certIssuer.email=$(LE_EMAIL) \
 		--wait
+	# Wait for the LB to be fully ready before returning. cert-manager starts the
+	# HTTP-01 challenge almost immediately after deploy — if it fires before the
+	# LB is healthy, LE gets a TCP timeout and cert-manager backs off for an hour.
+	# First we wait for EG to assign an IP, then we poll until the LB is actually
+	# forwarding traffic (curl 000 = no TCP connection; any HTTP response means ready).
+	# TODO: ideally cert-manager would add a retry delay before attempting the
+	# challenge after initial provisioning, making this workaround unnecessary.
+	kubectl wait gateway/gateway -n envoy-gateway-system \
+		--for=jsonpath='{.status.addresses[0].value}' \
+		--timeout=120s
+	@echo "Waiting for LoadBalancer to accept connections..."
+	@until curl -o /dev/null -s --max-time 5 -w '%{http_code}' http://$(HOSTNAME)/ | grep -qv "^000"; do sleep 5; done
 	helm upgrade --install api ./charts/api \
 		--set image.repository=$(REGISTRY)/api \
 		--set image.tag=$(IMAGE_TAG) \

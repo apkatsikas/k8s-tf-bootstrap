@@ -4,9 +4,6 @@ metadata:
   name: api
   namespace: {{ .Values.namespace }}
   annotations:
-    # TODO - conditionalize this for both not needed for KIND
-    # and only if cert issuer is this type
-    acme.cert-manager.io/http01-parentreffallback: "true"
     cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
 spec:
   parentRef:
@@ -24,3 +21,12 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    # TODO - remove once we can use 1.21 https://cert-manager.io/docs/releases/#upcoming-releases
+    # and can remove http listener from ListenerSet in favor of annotation acme.cert-manager.io/http01-parentreffallback: "true"
+    # on ListenerSet and 80 on Gateway
+    - name: solver
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same      

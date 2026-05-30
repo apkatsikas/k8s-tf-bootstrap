@@ -7,14 +7,18 @@ metadata:
   #   cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
 spec:
   gatewayClassName: eg
+  # keep this placeholder until https://github.com/kubernetes-sigs/gateway-api/issues/4425 is resolved
   listeners:
-  - name: solver
-    port: 80
-    protocol: HTTP
-    allowedRoutes:
-      namespaces:
-        # TODO - from cert-manager specific namespace?
-        from: All
+    - name: placeholder
+      port: 65535
+      protocol: HTTP
+      hostname: placeholder.invalid
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              placeholder: placeholder
   allowedListeners:
     namespaces:
       from: All

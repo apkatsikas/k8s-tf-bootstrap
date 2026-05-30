@@ -7,20 +7,4 @@ sources:
 # sync creates and deletes records to match live HTTPRoutes.
 policy: sync
 
-# txtOwnerId, extraArgs (--google-project), and serviceAccount.annotations
-# are injected at deploy time — see the install-external-dns make target.
-
-image:
-  tag: v0.21.0
-
-rbac:
-  additionalPermissions:
-  - apiGroups:
-    - gateway.networking.k8s.io
-    resources:
-    - listenersets
-    verbs:
-    - get
-    - watch
-    - list
-
+enableGatewayListenerSets: true

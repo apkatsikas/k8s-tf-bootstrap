@@ -8,10 +8,10 @@ spec:
   - kind: ListenerSet
     name: api
     namespace: {{ .Values.namespace }}
-    # # restrict to the https listener so the http listener
-    # # can handle the HTTP→HTTPS redirect independently. Without sectionName the
-    # # route binds to all listeners and wins over the redirect on port 80.
-    # sectionName: https
+    # TODO - remove once we can use 1.21 https://cert-manager.io/docs/releases/#upcoming-releases
+    # and can remove http listener from ListenerSet in favor of annotation acme.cert-manager.io/http01-parentreffallback: "true"
+    # on ListenerSet
+    sectionName: api
   hostnames:
   - {{ .Values.hostname }}
   rules:
