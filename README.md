@@ -119,6 +119,14 @@ gcloud domains registrations register yourdomain.com --project=$PROJECT_ID
 
 ### Teardown
 
+To uninstall all Helm releases without touching infrastructure:
+
+```bash
+helmfile -e gke destroy
+```
+
+To fully tear down (uninstalls Helm releases first, then destroys Terraform infrastructure):
+
 ```bash
 make gke-teardown
 ```

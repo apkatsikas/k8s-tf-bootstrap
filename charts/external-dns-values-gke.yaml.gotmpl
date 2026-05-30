@@ -1,7 +1,6 @@
 txtOwnerId: {{ requiredEnv "GKE_CLUSTER_NAME" }}
 extraArgs:
   - --google-project={{ requiredEnv "PROJECT_ID" }}
-  - --gateway-listener-sets
 serviceAccount:
   annotations:
     iam.gke.io/gcp-service-account: external-dns@{{ requiredEnv "PROJECT_ID" }}.iam.gserviceaccount.com

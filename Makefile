@@ -80,16 +80,12 @@ gke-push:
 # cert-manager issues the cert (~2 min). Check progress with: make gke-status
 gke-deploy:
 	HOSTNAME=$(HOSTNAME) LE_EMAIL=$(LE_EMAIL) helmfile -e gke -l name=infra sync
-	# Wait for the LB to be fully ready before deploying api. cert-manager starts the
-	# HTTP-01 challenge almost immediately after deploy — if it fires before the
-	# LB is healthy, LE gets a TCP timeout and cert-manager backs off for an hour.
-	# First we wait for EG to assign an IP, then we poll until the LB is actually
-	# forwarding traffic (curl 000 = no TCP connection; any HTTP response means ready).
+	# Wait for EG to assign an LB IP before deploying api. cert-manager starts the
+	# HTTP-01 challenge almost immediately after the ListenerSet is created — the LB
+	# IP must exist before that happens or LE will get a TCP timeout and back off for an hour.
 	kubectl wait gateway/gateway -n envoy-gateway-system \
 		--for=jsonpath='{.status.addresses[0].value}' \
 		--timeout=120s
-	@echo "Waiting for LoadBalancer to accept connections..."
-	@until curl -o /dev/null -s --max-time 5 -w '%{http_code}' http://$(HOSTNAME)/ | grep -qv "^000"; do sleep 5; done
 	HOSTNAME=$(HOSTNAME) REGISTRY=$(REGISTRY) IMAGE_TAG=$(IMAGE_TAG) helmfile -e gke -l name=api sync
 
 gke-all: gke-configure gke-init gke-push gke-deploy
