@@ -1,0 +1,45 @@
+releases:
+  - name: eg
+    namespace: envoy-gateway-system
+    createNamespace: true
+    chart: oci://docker.io/envoyproxy/gateway-helm
+    version: v1.8.0
+    labels:
+      tier: platform
+    wait: true
+
+  - name: cert-manager
+    namespace: cert-manager
+    createNamespace: true
+    chart: oci://quay.io/jetstack/charts/cert-manager
+    version: v1.20.2
+    labels:
+      tier: platform
+    values:
+      - charts/cert-manager-values.yaml
+    wait: true
+
+  - name: infra
+    namespace: infra
+    createNamespace: true
+    chart: ./charts/infra
+    labels:
+      tier: app
+    values:
+      - charts/infra/values-kind.yaml
+    needs:
+      - envoy-gateway-system/eg
+      - cert-manager/cert-manager
+    wait: true
+
+  - name: api
+    namespace: api
+    createNamespace: true
+    chart: ./charts/api
+    labels:
+      tier: app
+    values:
+      - charts/api/values-kind.yaml
+    needs:
+      - infra/infra
+    wait: true

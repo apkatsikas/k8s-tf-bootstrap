@@ -33,7 +33,8 @@ install-cert-manager:
 		-f charts/cert-manager-values.yaml \
 		--wait
 
-init: create-cluster install-envoy-gateway install-cert-manager
+init: create-cluster
+	helmfile -l tier=platform sync
 
  # Run npm install via Docker to update package-lock.json without needing Node installed locally.
 install-node-modules:
@@ -48,8 +49,8 @@ build:
 
 deploy:
 	kind load docker-image api:dev --name $(CLUSTER_NAME)
-	helm upgrade --install infra ./charts/infra -f charts/infra/values-kind.yaml --wait
-	helm upgrade --install api ./charts/api -f charts/api/values-kind.yaml --wait
+	helmfile -l tier=app sync
+# api:dev tag never changes, so helm won't restart pods on upgrade — force it.
 	kubectl rollout restart deployment/api -n api
 	kubectl rollout status deployment/api -n api --timeout=60s
 
