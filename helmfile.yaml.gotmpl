@@ -30,6 +30,13 @@ releases:
     version: v1.8.0
     labels:
       tier: platform
+{{- if env "ENVOY_GATEWAY_DEV_IMAGE" }}
+    set:
+      - name: deployment.envoyGateway.image.repository
+        value: {{ env "ENVOY_GATEWAY_DEV_IMAGE" | splitList ":" | first }}
+      - name: deployment.envoyGateway.image.tag
+        value: {{ env "ENVOY_GATEWAY_DEV_IMAGE" | splitList ":" | last }}
+{{- end }}
     wait: true
 
   - name: cert-manager

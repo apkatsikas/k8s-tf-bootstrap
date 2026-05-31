@@ -10,6 +10,13 @@ HOSTNAME   ?= $(shell terraform -chdir=terraform output -raw hostname 2>/dev/nul
 LE_EMAIL   ?= $(shell terraform -chdir=terraform output -raw le_email 2>/dev/null)
 PROJECT_ID ?=
 
+ENVOY_GATEWAY_SRC     ?= /home/drew/gateway
+ENVOY_GATEWAY_DEV_TAG := dev-$(shell git -C $(ENVOY_GATEWAY_SRC) rev-parse --short HEAD)
+# Scratch override: export so all helmfile calls use local EG image.
+# Remove these two lines to revert to the published image.
+ENVOY_GATEWAY_DEV_IMAGE := $(REGISTRY)/envoy-gateway:$(ENVOY_GATEWAY_DEV_TAG)
+export ENVOY_GATEWAY_DEV_IMAGE
+
 create-cluster:
 	kind get clusters | grep -q "^$(CLUSTER_NAME)$$" || kind create cluster --name $(CLUSTER_NAME) --config kind-cluster/kind.yaml
 
@@ -74,6 +81,10 @@ gke-init:
 	GKE_CLUSTER_NAME=$(GKE_CLUSTER_NAME) PROJECT_ID=$(PROJECT_ID) helmfile -e gke -l name=eg sync
 	GKE_CLUSTER_NAME=$(GKE_CLUSTER_NAME) PROJECT_ID=$(PROJECT_ID) helmfile -e gke -l name=external-dns sync
 
+eg-push:
+	cd $(ENVOY_GATEWAY_SRC) && make image IMAGE=$(REGISTRY)/envoy-gateway TAG=$(ENVOY_GATEWAY_DEV_TAG)
+	docker push $(REGISTRY)/envoy-gateway:$(ENVOY_GATEWAY_DEV_TAG)
+
 gke-push:
 	docker build -t $(REGISTRY)/api:$(IMAGE_TAG) .
 	docker push $(REGISTRY)/api:$(IMAGE_TAG)
@@ -95,7 +106,7 @@ gke-deploy:
 	LE_EMAIL=$(LE_EMAIL) helmfile -e gke -l name=cert-manager sync
 	LE_EMAIL=$(LE_EMAIL) helmfile -e gke -l name=cert-manager-config sync
 
-gke-all: gke-configure gke-init gke-push gke-deploy
+gke-all: gke-configure eg-push gke-init gke-push gke-deploy
 
 # Show pods, services, gateways, and cert status.
 gke-status:

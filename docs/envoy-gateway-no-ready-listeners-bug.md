@@ -40,8 +40,8 @@ The spec also defines `Accepted` via `RouteParentStatus`:
 > Note that the route's availability is also subject to the Gateway's own
 > status conditions and listener status.
 
-The second sentence notes that listener status affects route *availability*
-separately from route *acceptance*. What "implemented by the Gateway" means
+The second sentence notes that listener status affects route _availability_
+separately from route _acceptance_. What "implemented by the Gateway" means
 in the context of a listener that is accepted but not yet programmed is
 ambiguous in the spec.
 

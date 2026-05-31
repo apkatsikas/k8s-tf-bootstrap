@@ -8,16 +8,16 @@ the HTTP-01 solver needs its own listener on the ListenerSet.
 
 **`charts/api/templates/listenerset.yaml`** has two listeners:
 
-| Listener | Port | Protocol | Purpose |
-|----------|------|----------|---------|
-| `api`    | 443  | HTTPS    | TLS-terminated app traffic |
+| Listener | Port | Protocol | Purpose                                     |
+| -------- | ---- | -------- | ------------------------------------------- |
+| `api`    | 443  | HTTPS    | TLS-terminated app traffic                  |
 | `solver` | 80   | HTTP     | ACME HTTP-01 challenge + bootstrap redirect |
 
 **`charts/api/templates/httproute.yaml`** has two routes:
 
-| Route | Parent | Purpose |
-|-------|--------|---------|
-| `api` | ListenerSet `api` → `api` listener | App traffic (HTTPS) |
+| Route          | Parent                                | Purpose                                                                                                         |
+| -------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `api`          | ListenerSet `api` → `api` listener    | App traffic (HTTPS)                                                                                             |
 | `api-redirect` | ListenerSet `api` → `solver` listener | HTTP → HTTPS redirect (also gives external-dns an accepted route to create the A record before the cert exists) |
 
 The `api-redirect` route is necessary because external-dns requires an accepted
@@ -72,15 +72,15 @@ metadata:
   namespace: envoy-gateway-system
 spec:
   parentRefs:
-  - name: gateway
-    namespace: envoy-gateway-system
-    sectionName: http
+    - name: gateway
+      namespace: envoy-gateway-system
+      sectionName: http
   rules:
-  - filters:
-    - type: RequestRedirect
-      requestRedirect:
-        scheme: https
-        statusCode: 301
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
 ```
 
 No `hostnames` field — matches all hostnames on the `http` listener. cert-manager's
@@ -93,21 +93,21 @@ Add the parentreffallback annotation and remove the `solver` listener:
 ```yaml
 metadata:
   annotations:
-    cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
+    cert-manager.io/cluster-issuer: { { .Values.certIssuer.name } }
     acme.cert-manager.io/http01-parentreffallback: "true"
 spec:
   listeners:
-  - name: api
-    hostname: {{ .Values.hostname }}
-    port: 443
-    protocol: HTTPS
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - name: api-tls
-    allowedRoutes:
-      namespaces:
-        from: Same
+    - name: api
+      hostname: { { .Values.hostname } }
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: api-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
 ```
 
 ### 4. Remove the per-app redirect route (`charts/api/templates/httproute.yaml`)
