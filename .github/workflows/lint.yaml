@@ -1,0 +1,31 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install prettier
+        run: npm install -g prettier prettier-plugin-yaml
+
+      - name: prettier
+        run: prettier --check "**/*.yaml"
+
+      - name: yamllint
+        run: |
+          pip install yamllint
+          yamllint .
+
+      - name: Install helm
+        uses: azure/setup-helm@v5
+
+      - name: helm lint
+        run: |
+          helm lint charts/infra
+          helm lint charts/api
