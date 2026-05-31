@@ -5,12 +5,13 @@ metadata:
   namespace: {{ .Values.namespace }}
 spec:
   parentRefs:
-  - name: gateway
-    namespace: envoy-gateway-system
-    # restrict to the https listener so the http listener
-    # can handle the HTTP→HTTPS redirect independently. Without sectionName the
-    # route binds to all listeners and wins over the redirect on port 80.
-    sectionName: https
+  - kind: ListenerSet
+    name: api
+    namespace: {{ .Values.namespace }}
+    # TODO - remove once we can use 1.21 https://cert-manager.io/docs/releases/#upcoming-releases
+    # and can remove http listener from ListenerSet in favor of annotation acme.cert-manager.io/http01-parentreffallback: "true"
+    # on ListenerSet
+    sectionName: api
   hostnames:
   - {{ .Values.hostname }}
   rules:
@@ -21,3 +22,32 @@ spec:
     backendRefs:
     - name: api
       port: 80
+---
+# Attached to the port 80 solver listener so external-dns sees an accepted
+# HTTPRoute before the TLS cert exists. Also redirects HTTP → HTTPS.
+# cert-manager's HTTP-01 challenge HTTPRoute uses an Exact path match
+# (/.well-known/acme-challenge/<token>) which takes precedence over this
+# PathPrefix: / redirect.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-redirect
+  namespace: {{ .Values.namespace }}
+spec:
+  parentRefs:
+  - kind: ListenerSet
+    name: api
+    namespace: {{ .Values.namespace }}
+    sectionName: solver
+  hostnames:
+  - {{ .Values.hostname }}
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301

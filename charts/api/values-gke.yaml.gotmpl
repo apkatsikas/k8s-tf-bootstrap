@@ -1,0 +1,4 @@
+hostname: {{ requiredEnv "HOSTNAME" }}
+image:
+  repository: {{ requiredEnv "REGISTRY" }}/api
+  tag: {{ env "IMAGE_TAG" | default "latest" }}

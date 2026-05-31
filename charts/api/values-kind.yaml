@@ -7,3 +7,6 @@ image:
   pullPolicy: Never
 
 hostname: api.localhost
+
+certIssuer:
+  name: selfsigned

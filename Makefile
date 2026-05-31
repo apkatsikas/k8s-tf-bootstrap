@@ -1,7 +1,5 @@
-CLUSTER_NAME          := kind-app
-ENVOY_GATEWAY_VERSION := v1.7.1
-CERT_MANAGER_VERSION  := v1.20.0
-EXTERNAL_DNS_VERSION  := 1.20.0
+CLUSTER_NAME     := kind-app
+GKE_CLUSTER_NAME ?= $(shell terraform -chdir=terraform output -raw cluster_name 2>/dev/null)
 
 # GKE settings — auto-derived from terraform outputs when not set explicitly.
 # IMAGE_TAG defaults to latest; use a git SHA for real deploys.
@@ -15,26 +13,11 @@ PROJECT_ID ?=
 create-cluster:
 	kind get clusters | grep -q "^$(CLUSTER_NAME)$$" || kind create cluster --name $(CLUSTER_NAME) --config kind-cluster/kind.yaml
 
-install-envoy-gateway:
-	helm upgrade --install eg \
-		oci://docker.io/envoyproxy/gateway-helm \
-		--version $(ENVOY_GATEWAY_VERSION) \
-		--namespace envoy-gateway-system \
-		--create-namespace \
-		--wait
+init: create-cluster
+	helmfile -e kind -l tier=platform sync
 
-install-cert-manager:
-	helm upgrade --install cert-manager \
-		oci://quay.io/jetstack/charts/cert-manager \
-		--version $(CERT_MANAGER_VERSION) \
-		--namespace cert-manager \
-		--create-namespace \
-		-f charts/cert-manager-values.yaml \
-		--wait
-
-init: create-cluster install-envoy-gateway install-cert-manager
-
- # Run npm install via Docker to update package-lock.json without needing Node installed locally.
+# Run npm install via Docker to update package-lock.json without needing Node installed locally.
+# Run manually when adding or updating npm dependencies.
 install-node-modules:
 	docker run --rm \
 		-v $(PWD)/src:/app \
@@ -47,8 +30,8 @@ build:
 
 deploy:
 	kind load docker-image api:dev --name $(CLUSTER_NAME)
-	helm upgrade --install infra ./charts/infra -f charts/infra/values-kind.yaml --wait
-	helm upgrade --install api ./charts/api -f charts/api/values-kind.yaml --wait
+	helmfile -e kind -l tier=app sync
+	# api:dev tag never changes, so helm won't restart pods on upgrade — force it.
 	kubectl rollout restart deployment/api -n api
 	kubectl rollout status deployment/api -n api --timeout=60s
 
@@ -79,43 +62,38 @@ terraform-plan:
 terraform-apply:
 	terraform -chdir=terraform apply
 
-install-external-dns:
-	helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/ --force-update
-	helm upgrade --install external-dns external-dns/external-dns \
-		--version $(EXTERNAL_DNS_VERSION) \
-		--namespace external-dns \
-		--create-namespace \
-		-f charts/external-dns-values.yaml \
-		--set txtOwnerId=$(CLUSTER_NAME) \
-		--set "extraArgs={--google-project=$(PROJECT_ID)}" \
-		--set 'serviceAccount.annotations.iam\.gke\.io/gcp-service-account=external-dns@$(PROJECT_ID).iam.gserviceaccount.com' \
-		--wait
-
 gke-configure:
 	bash -c "$$(terraform -chdir=terraform output -raw configure_docker)"
 	bash -c "$$(terraform -chdir=terraform output -raw configure_kubectl)"
 
-# Install Envoy Gateway, cert-manager, and external-dns into the GKE cluster.
+# Install Envoy Gateway and external-dns. cert-manager is installed last in
+# gke-deploy after port 80 and DNS are confirmed ready, to avoid a race where
+# cert-manager fires the HTTP-01 challenge before the LB and DNS are available.
 # Requires PROJECT_ID to be set.
-gke-init: install-envoy-gateway install-cert-manager install-external-dns
+gke-init:
+	GKE_CLUSTER_NAME=$(GKE_CLUSTER_NAME) PROJECT_ID=$(PROJECT_ID) helmfile -e gke -l name=eg sync
+	GKE_CLUSTER_NAME=$(GKE_CLUSTER_NAME) PROJECT_ID=$(PROJECT_ID) helmfile -e gke -l name=external-dns sync
 
 gke-push:
 	docker build -t $(REGISTRY)/api:$(IMAGE_TAG) .
 	docker push $(REGISTRY)/api:$(IMAGE_TAG)
 
-# Note: TLS cert issuance happens asynchronously after deploy. external-dns
-# creates the DNS record once the LoadBalancer IP is assigned (~1 min), then
-# cert-manager issues the cert (~2 min). Check progress with: make gke-status
 gke-deploy:
-	helm upgrade --install infra ./charts/infra \
-		--set hostname=$(HOSTNAME) \
-		--set certIssuer.email=$(LE_EMAIL) \
-		--wait
-	helm upgrade --install api ./charts/api \
-		--set image.repository=$(REGISTRY)/api \
-		--set image.tag=$(IMAGE_TAG) \
-		--set hostname=$(HOSTNAME) \
-		--wait
+	HOSTNAME=$(HOSTNAME) helmfile -e gke -l name=infra sync
+	kubectl wait gateway/gateway -n envoy-gateway-system \
+		--for=jsonpath='{.status.addresses[0].value}' \
+		--timeout=120s
+	HOSTNAME=$(HOSTNAME) REGISTRY=$(REGISTRY) IMAGE_TAG=$(IMAGE_TAG) helmfile -e gke -l name=api sync
+	# Wait for port 80 on the LB and DNS to be ready before installing cert-manager.
+	# cert-manager fires the HTTP-01 challenge immediately on startup — installing it
+	# last guarantees the LB and DNS are ready when the challenge is attempted.
+	@LB_IP=$$(kubectl get gateway gateway -n envoy-gateway-system -o jsonpath='{.status.addresses[0].value}'); \
+	echo "Waiting for port 80 on LoadBalancer $$LB_IP..."; \
+	until curl -o /dev/null -s --max-time 5 -w '%{http_code}' http://$$LB_IP/ | grep -qv "^000"; do sleep 5; done
+	@echo "Waiting for DNS..."
+	@until dig +short $(HOSTNAME) | grep -q .; do sleep 5; done
+	LE_EMAIL=$(LE_EMAIL) helmfile -e gke -l name=cert-manager sync
+	LE_EMAIL=$(LE_EMAIL) helmfile -e gke -l name=cert-manager-config sync
 
 gke-all: gke-configure gke-init gke-push gke-deploy
 
@@ -135,8 +113,8 @@ gke-status:
 # cloud load balancer before terraform destroy removes the cluster. If terraform
 # runs first the load balancer may be orphaned and continue accruing charges.
 gke-teardown:
-	helm uninstall api --ignore-not-found
-	helm uninstall infra --ignore-not-found
+	helm uninstall api -n api --ignore-not-found
+	helm uninstall infra -n infra --ignore-not-found
 	helm uninstall external-dns -n external-dns --ignore-not-found
 	helm uninstall cert-manager -n cert-manager --ignore-not-found
 	helm uninstall eg -n envoy-gateway-system --ignore-not-found

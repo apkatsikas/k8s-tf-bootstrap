@@ -8,7 +8,3 @@ kind: false
 # Your domain name, e.g. api.yourdomain.link
 hostname: ""
 
-certIssuer:
-  name: letsencrypt
-  # Your email address — Let's Encrypt sends expiry notifications here.
-  email: ""

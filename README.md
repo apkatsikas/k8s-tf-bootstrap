@@ -16,9 +16,10 @@ Includes a Node.js app running on Kubernetes with TLS, Gateway API, and Helm. Wo
 | [Terraform](https://www.terraform.io/)                          | Provisions GKE cluster, Artifact Registry, Cloud DNS zone, and IAM              |
 | [KIND](https://kind.sigs.k8s.io/)                               | Runs a real Kubernetes cluster locally inside Docker                            |
 
-Two Helm charts keep concerns separate:
+Three Helm charts keep concerns separate:
 
-- **`charts/infra`** — GatewayClass, Gateway, ClusterIssuer, EnvoyProxy (platform layer)
+- **`charts/infra`** — GatewayClass, Gateway, EnvoyProxy (platform layer)
+- **`charts/cert-manager-config`** — ClusterIssuer (installed last on GKE, after LB and DNS are ready)
 - **`charts/api`** — Deployment, Service, HTTPRoutes (application layer)
 
 ---
@@ -28,13 +29,15 @@ Two Helm charts keep concerns separate:
 ```
 .
 ├── charts/
-│   ├── infra/          # Platform: GatewayClass, Gateway, ClusterIssuer, EnvoyProxy
-│   └── api/            # App: Deployment, Service, HTTPRoutes
+│   ├── infra/                # Platform: GatewayClass, Gateway, EnvoyProxy
+│   ├── cert-manager-config/  # ClusterIssuer (installed last on GKE)
+│   └── api/                  # App: Deployment, Service, HTTPRoutes
 ├── kind-cluster/
 │   └── kind.yaml       # KIND cluster config (port mappings)
 ├── terraform/          # GKE cluster, registry, DNS zone, IAM
 ├── src/                # Node.js application source
 ├── Dockerfile
+├── helmfile.yaml.gotmpl
 └── Makefile
 ```
 
@@ -50,6 +53,7 @@ Two Helm charts keep concerns separate:
 | [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) | Local Kubernetes cluster    |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/)                   | Talks to the cluster        |
 | [helm](https://helm.sh/docs/intro/install/)                          | Deploys the charts          |
+| [helmfile](https://helmfile.readthedocs.io/en/latest/#installation)  | Orchestrates helm releases  |
 
 ### Quick Start
 
@@ -78,12 +82,13 @@ make status  # pods, services, gateway, routes in the api namespace
 
 ### One-time prerequisites
 
-| Tool                                                           | Purpose                   |
-| -------------------------------------------------------------- | ------------------------- |
-| [gcloud](https://cloud.google.com/sdk/docs/install)            | GCP CLI                   |
-| [terraform](https://developer.hashicorp.com/terraform/install) | Provisions infrastructure |
-| [helm](https://helm.sh/docs/intro/install/)                    | Deploys the charts        |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/)             | Talks to the cluster      |
+| Tool                                                                | Purpose                    |
+| ------------------------------------------------------------------- | -------------------------- |
+| [gcloud](https://cloud.google.com/sdk/docs/install)                 | GCP CLI                    |
+| [terraform](https://developer.hashicorp.com/terraform/install)      | Provisions infrastructure  |
+| [helm](https://helm.sh/docs/intro/install/)                         | Deploys the charts         |
+| [helmfile](https://helmfile.readthedocs.io/en/latest/#installation) | Orchestrates helm releases |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/)                  | Talks to the cluster       |
 
 Register your domain once via Cloud Domains (survives teardown):
 
@@ -94,23 +99,34 @@ gcloud domains registrations register yourdomain.com --project=$PROJECT_ID
 ### Deploy
 
 1. `export PROJECT_ID=your-gcp-project-id`
-2. `gcloud auth login`
-3. `gcloud auth application-default login`
+2. `gcloud auth login --no-launch-browser`
+3. `gcloud auth application-default login --no-launch-browser`
 4. `gcloud config set project $PROJECT_ID`
 5. `gcloud auth application-default set-quota-project $PROJECT_ID`
 6. Fill in `terraform/terraform.tfvars`
 7. `make terraform-init`
 8. `make terraform-plan`
-9. `make terraform-apply` — provisions cluster, registry, Cloud DNS zone, syncs nameservers
-10. `make gke-all PROJECT_ID=$PROJECT_ID`
-    > After deploy, external-dns creates the DNS A record (~1 min) and cert-manager issues the TLS cert (~2 min):
+9. If the Cloud DNS zone already exists outside of Terraform state (e.g. from a previous run):
+   ```bash
+   terraform -chdir=terraform import google_dns_managed_zone.main andrewkatsikas-com
+   ```
+10. `make terraform-apply` — provisions cluster, registry, Cloud DNS zone, syncs nameservers
+11. `make gke-all PROJECT_ID=$PROJECT_ID`
+    > `gke-deploy` waits for port 80 and DNS before installing cert-manager, so the TLS cert is issued on the first attempt. Monitor progress with:
     >
     > ```bash
     > make gke-status
-    > watch dig $(terraform -chdir=terraform output -raw hostname) +short
     > ```
 
 ### Teardown
+
+To uninstall all Helm releases without touching infrastructure:
+
+```bash
+helmfile -e gke destroy
+```
+
+To fully tear down (uninstalls Helm releases first, then destroys Terraform infrastructure):
 
 ```bash
 make gke-teardown
@@ -150,7 +166,7 @@ KIND has no cloud load balancer, so `kind-cluster/kind.yaml` maps host ports int
 
 ### TLS
 
-cert-manager watches the Gateway annotation (`cert-manager.io/cluster-issuer`) and manages the full certificate lifecycle. Locally it issues a self-signed cert; on GKE it uses Let's Encrypt via HTTP-01 challenge over the Gateway's HTTP listener.
+cert-manager manages the full certificate lifecycle. Locally it issues a self-signed cert; on GKE it uses Let's Encrypt via HTTP-01 challenge. On GKE, cert-manager is installed last — after port 80 and DNS are confirmed ready — to avoid a bootstrap race where the challenge fires before the load balancer and DNS are available.
 
 ### DNS (GKE)
 

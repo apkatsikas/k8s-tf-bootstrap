@@ -1,0 +1,42 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+
+      - name: Install helm
+        uses: azure/setup-helm@v5
+
+      - name: Install helmfile
+        run: |
+          url="https://github.com/helmfile/helmfile/releases/download"
+          curl -sSL "$url/v1.5.2/helmfile_1.5.2_linux_amd64.tar.gz" |
+            tar -xz helmfile
+          sudo mv helmfile /usr/local/bin/
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v5
+
+      - name: Resolve api.localhost
+        run: echo "127.0.0.1 api.localhost" | sudo tee -a /etc/hosts
+
+      - name: Bootstrap cluster and deploy
+        run: make all
+
+      - name: Verify response
+        run: |
+          response=$(curl -sk https://api.localhost)
+          echo "Response: $response"
+          echo "$response" | grep -q "Hello from Kubernetes"

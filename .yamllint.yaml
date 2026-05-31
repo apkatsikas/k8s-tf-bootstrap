@@ -1,0 +1,4 @@
+extends: default
+ignore: |
+  charts/
+  src/node_modules/
