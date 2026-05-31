@@ -3,8 +3,6 @@ kind: Gateway
 metadata:
   name: gateway
   namespace: envoy-gateway-system
-  # annotations:
-  #   cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
 spec:
   gatewayClassName: eg
   # keep this placeholder until https://github.com/kubernetes-sigs/gateway-api/issues/4425 is resolved
@@ -22,14 +20,3 @@ spec:
   allowedListeners:
     namespaces:
       from: All
-  # - name: https
-  #   hostname: {{ .Values.hostname }}
-  #   port: 443
-  #   protocol: HTTPS
-  #   tls:
-  #     mode: Terminate
-  #     certificateRefs:
-  #       - name: api-tls
-  #   allowedRoutes:
-  #     namespaces:
-  #       from: All

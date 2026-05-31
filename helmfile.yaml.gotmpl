@@ -1,3 +1,18 @@
+# Release labels:
+#   tier=platform — cluster infrastructure (eg, cert-manager, external-dns)
+#   tier=app      — application charts (infra, api)
+#   name=<x>      — used for targeted syncs; helmfile auto-generates this from the
+#                   release name, so it always equals the release name
+#
+# needs: only enforces ordering within a single helmfile sync call. When the
+# Makefile calls helmfile with -l name=<x>, each call is isolated and needs
+# has no effect — the Makefile's sequential ordering is what controls deployment.
+#
+# GKE ordering: cert-manager is intentionally excluded from gke-init and
+# installed last in gke-deploy, after port 80 and DNS are confirmed ready.
+# This avoids a bootstrap race where the HTTP-01 challenge fires before the
+# load balancer and DNS are available. On KIND this isn't an issue (self-signed).
+
 repositories:
   - name: external-dns
     url: https://kubernetes-sigs.github.io/external-dns/
@@ -24,8 +39,16 @@ releases:
     version: v1.20.2
     labels:
       tier: platform
+      name: cert-manager
     values:
-      - charts/cert-manager-values.yaml
+      - config:
+          enableGatewayAPI: true
+          enableGatewayAPIListenerSet: true
+          featureGates:
+            ListenerSets: true
+    set:
+      - name: crds.enabled
+        value: "true"
     wait: true
 
   - name: external-dns
@@ -37,12 +60,31 @@ releases:
     labels:
       tier: platform
     values:
-      - charts/external-dns-values.yaml
+      - provider:
+          name: google
+        sources:
+          - gateway-httproute
+        policy: sync
+        enableGatewayListenerSets: true
 {{- if eq .Environment.Name "gke" }}
       - charts/external-dns-values-gke.yaml.gotmpl
 {{- end }}
     needs:
       - envoy-gateway-system/eg
+    wait: true
+
+  - name: cert-manager-config
+    namespace: cert-manager
+    chart: ./charts/cert-manager-config
+    labels:
+      tier: platform
+    values:
+{{- if eq .Environment.Name "kind" }}
+      - charts/cert-manager-config/values-kind.yaml
+{{- else }}
+      - charts/cert-manager-config/values-gke.yaml.gotmpl
+{{- end }}
+    needs:
       - cert-manager/cert-manager
     wait: true
 
@@ -61,7 +103,6 @@ releases:
 {{- end }}
     needs:
       - envoy-gateway-system/eg
-      - cert-manager/cert-manager
     wait: true
 
   - name: api

@@ -66,27 +66,34 @@ gke-configure:
 	bash -c "$$(terraform -chdir=terraform output -raw configure_docker)"
 	bash -c "$$(terraform -chdir=terraform output -raw configure_kubectl)"
 
-# Install Envoy Gateway, cert-manager, and external-dns into the GKE cluster.
+# Install Envoy Gateway and external-dns. cert-manager is installed last in
+# gke-deploy after port 80 and DNS are confirmed ready, to avoid a race where
+# cert-manager fires the HTTP-01 challenge before the LB and DNS are available.
 # Requires PROJECT_ID to be set.
 gke-init:
-	GKE_CLUSTER_NAME=$(GKE_CLUSTER_NAME) PROJECT_ID=$(PROJECT_ID) helmfile -e gke -l tier=platform sync
+	GKE_CLUSTER_NAME=$(GKE_CLUSTER_NAME) PROJECT_ID=$(PROJECT_ID) helmfile -e gke -l name=eg sync
+	GKE_CLUSTER_NAME=$(GKE_CLUSTER_NAME) PROJECT_ID=$(PROJECT_ID) helmfile -e gke -l name=external-dns sync
 
 gke-push:
 	docker build -t $(REGISTRY)/api:$(IMAGE_TAG) .
 	docker push $(REGISTRY)/api:$(IMAGE_TAG)
 
-# Note: TLS cert issuance happens asynchronously after deploy. external-dns
-# creates the DNS record once the LoadBalancer IP is assigned (~1 min), then
-# cert-manager issues the cert (~2 min). Check progress with: make gke-status
 gke-deploy:
-	HOSTNAME=$(HOSTNAME) LE_EMAIL=$(LE_EMAIL) helmfile -e gke -l name=infra sync
-	# Wait for EG to assign an LB IP before deploying api. cert-manager starts the
-	# HTTP-01 challenge almost immediately after the ListenerSet is created — the LB
-	# IP must exist before that happens or LE will get a TCP timeout and back off for an hour.
+	HOSTNAME=$(HOSTNAME) helmfile -e gke -l name=infra sync
 	kubectl wait gateway/gateway -n envoy-gateway-system \
 		--for=jsonpath='{.status.addresses[0].value}' \
 		--timeout=120s
 	HOSTNAME=$(HOSTNAME) REGISTRY=$(REGISTRY) IMAGE_TAG=$(IMAGE_TAG) helmfile -e gke -l name=api sync
+	# Wait for port 80 on the LB and DNS to be ready before installing cert-manager.
+	# cert-manager fires the HTTP-01 challenge immediately on startup — installing it
+	# last guarantees the LB and DNS are ready when the challenge is attempted.
+	@LB_IP=$$(kubectl get gateway gateway -n envoy-gateway-system -o jsonpath='{.status.addresses[0].value}'); \
+	echo "Waiting for port 80 on LoadBalancer $$LB_IP..."; \
+	until curl -o /dev/null -s --max-time 5 -w '%{http_code}' http://$$LB_IP/ | grep -qv "^000"; do sleep 5; done
+	@echo "Waiting for DNS..."
+	@until dig +short $(HOSTNAME) | grep -q .; do sleep 5; done
+	LE_EMAIL=$(LE_EMAIL) helmfile -e gke -l name=cert-manager sync
+	LE_EMAIL=$(LE_EMAIL) helmfile -e gke -l name=cert-manager-config sync
 
 gke-all: gke-configure gke-init gke-push gke-deploy
 

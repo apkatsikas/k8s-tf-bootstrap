@@ -16,9 +16,10 @@ Includes a Node.js app running on Kubernetes with TLS, Gateway API, and Helm. Wo
 | [Terraform](https://www.terraform.io/)                          | Provisions GKE cluster, Artifact Registry, Cloud DNS zone, and IAM              |
 | [KIND](https://kind.sigs.k8s.io/)                               | Runs a real Kubernetes cluster locally inside Docker                            |
 
-Two Helm charts keep concerns separate:
+Three Helm charts keep concerns separate:
 
-- **`charts/infra`** — GatewayClass, Gateway, ClusterIssuer, EnvoyProxy (platform layer)
+- **`charts/infra`** — GatewayClass, Gateway, EnvoyProxy (platform layer)
+- **`charts/cert-manager-config`** — ClusterIssuer (installed last on GKE, after LB and DNS are ready)
 - **`charts/api`** — Deployment, Service, HTTPRoutes (application layer)
 
 ---
@@ -28,8 +29,9 @@ Two Helm charts keep concerns separate:
 ```
 .
 ├── charts/
-│   ├── infra/          # Platform: GatewayClass, Gateway, ClusterIssuer, EnvoyProxy
-│   └── api/            # App: Deployment, Service, HTTPRoutes
+│   ├── infra/                # Platform: GatewayClass, Gateway, EnvoyProxy
+│   ├── cert-manager-config/  # ClusterIssuer (installed last on GKE)
+│   └── api/                  # App: Deployment, Service, HTTPRoutes
 ├── kind-cluster/
 │   └── kind.yaml       # KIND cluster config (port mappings)
 ├── terraform/          # GKE cluster, registry, DNS zone, IAM
@@ -110,11 +112,10 @@ gcloud domains registrations register yourdomain.com --project=$PROJECT_ID
    ```
 10. `make terraform-apply` — provisions cluster, registry, Cloud DNS zone, syncs nameservers
 11. `make gke-all PROJECT_ID=$PROJECT_ID`
-    > After deploy, external-dns creates the DNS A record (~1 min) and cert-manager issues the TLS cert (~2 min):
+    > `gke-deploy` waits for port 80 and DNS before installing cert-manager, so the TLS cert is issued on the first attempt. Monitor progress with:
     >
     > ```bash
     > make gke-status
-    > watch dig $(terraform -chdir=terraform output -raw hostname) +short
     > ```
 
 ### Teardown
@@ -165,7 +166,7 @@ KIND has no cloud load balancer, so `kind-cluster/kind.yaml` maps host ports int
 
 ### TLS
 
-cert-manager watches the Gateway annotation (`cert-manager.io/cluster-issuer`) and manages the full certificate lifecycle. Locally it issues a self-signed cert; on GKE it uses Let's Encrypt via HTTP-01 challenge over the Gateway's HTTP listener.
+cert-manager manages the full certificate lifecycle. Locally it issues a self-signed cert; on GKE it uses Let's Encrypt via HTTP-01 challenge. On GKE, cert-manager is installed last — after port 80 and DNS are confirmed ready — to avoid a bootstrap race where the challenge fires before the load balancer and DNS are available.
 
 ### DNS (GKE)
 
