@@ -82,13 +82,13 @@ make status  # pods, services, gateway, routes in the api namespace
 
 ### One-time prerequisites
 
-| Tool                                                           | Purpose                   |
-| -------------------------------------------------------------- | ------------------------- |
-| [gcloud](https://cloud.google.com/sdk/docs/install)            | GCP CLI                   |
-| [terraform](https://developer.hashicorp.com/terraform/install) | Provisions infrastructure |
-| [helm](https://helm.sh/docs/intro/install/)                    | Deploys the charts        |
+| Tool                                                                | Purpose                    |
+| ------------------------------------------------------------------- | -------------------------- |
+| [gcloud](https://cloud.google.com/sdk/docs/install)                 | GCP CLI                    |
+| [terraform](https://developer.hashicorp.com/terraform/install)      | Provisions infrastructure  |
+| [helm](https://helm.sh/docs/intro/install/)                         | Deploys the charts         |
 | [helmfile](https://helmfile.readthedocs.io/en/latest/#installation) | Orchestrates helm releases |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/)             | Talks to the cluster      |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/)                  | Talks to the cluster       |
 
 Register your domain once via Cloud Domains (survives teardown):
 
