@@ -4,7 +4,7 @@ metadata:
   name: api
   namespace: {{ .Values.namespace }}
   annotations:
-    cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
+    # cert-manager.io/cluster-issuer: {{ .Values.certIssuer.name }}
 spec:
   parentRef:
     name: gateway

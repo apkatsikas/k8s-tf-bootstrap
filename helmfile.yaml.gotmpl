@@ -36,6 +36,8 @@ releases:
         value: {{ env "ENVOY_GATEWAY_DEV_IMAGE" | splitList ":" | first }}
       - name: deployment.envoyGateway.image.tag
         value: {{ env "ENVOY_GATEWAY_DEV_IMAGE" | splitList ":" | last }}
+      - name: deployment.envoyGateway.image.pullPolicy
+        value: {{ env "ENVOY_GATEWAY_PULL_POLICY" | default "IfNotPresent" }}
 {{- end }}
     wait: true
 

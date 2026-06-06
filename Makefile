@@ -12,6 +12,8 @@ PROJECT_ID ?=
 
 ENVOY_GATEWAY_SRC     ?= /home/drew/gateway
 ENVOY_GATEWAY_DEV_TAG := dev-$(shell git -C $(ENVOY_GATEWAY_SRC) rev-parse --short HEAD)
+# GKE: push to registry; KIND: load directly — no registry prefix.
+ENVOY_GATEWAY_KIND_IMAGE := envoy-gateway:$(ENVOY_GATEWAY_DEV_TAG)
 # Scratch override: export so all helmfile calls use local EG image.
 # Remove these two lines to revert to the published image.
 ENVOY_GATEWAY_DEV_IMAGE := $(REGISTRY)/envoy-gateway:$(ENVOY_GATEWAY_DEV_TAG)
@@ -22,6 +24,16 @@ create-cluster:
 
 init: create-cluster
 	helmfile -e kind -l tier=platform sync
+
+# Build EG from source and load into the KIND cluster.
+kind-eg-load: create-cluster
+	cd $(ENVOY_GATEWAY_SRC) && make image IMAGE=envoy-gateway TAG=$(ENVOY_GATEWAY_DEV_TAG)
+	kind load docker-image $(ENVOY_GATEWAY_KIND_IMAGE) --name $(CLUSTER_NAME)
+
+# Full platform init using a locally-built EG dev image.
+kind-eg-init: kind-eg-load
+	ENVOY_GATEWAY_DEV_IMAGE=$(ENVOY_GATEWAY_KIND_IMAGE) ENVOY_GATEWAY_PULL_POLICY=Never \
+		helmfile -e kind -l tier=platform sync
 
 # Run npm install via Docker to update package-lock.json without needing Node installed locally.
 # Run manually when adding or updating npm dependencies.
@@ -49,6 +61,8 @@ status:
 	kubectl get pods,svc,gateway,httproute -n api
 
 all: init install-node-modules build deploy
+
+kind-eg-all: kind-eg-init install-node-modules build deploy
 
 delete-cluster:
 	kind delete cluster --name $(CLUSTER_NAME)
