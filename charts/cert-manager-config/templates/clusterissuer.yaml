@@ -7,8 +7,7 @@ spec:
   acme:
     # Swap in the staging URL while testing to avoid production rate limits:
     # https://acme-staging-v02.api.letsencrypt.org/directory
-    # https://acme-v02.api.letsencrypt.org/directory
-    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    server: https://acme-v02.api.letsencrypt.org/directory
     email: {{ .Values.certIssuer.email }}
     privateKeySecretRef:
       name: letsencrypt-account-key
