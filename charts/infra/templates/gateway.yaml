@@ -5,18 +5,13 @@ metadata:
   namespace: envoy-gateway-system
 spec:
   gatewayClassName: eg
-  # keep this placeholder until https://github.com/kubernetes-sigs/gateway-api/issues/4425 is resolved
   listeners:
-    - name: placeholder
-      port: 65535
+    - name: http
+      port: 80
       protocol: HTTP
-      hostname: placeholder.invalid
       allowedRoutes:
         namespaces:
-          from: Selector
-          selector:
-            matchLabels:
-              placeholder: placeholder
+          from: All
   allowedListeners:
     namespaces:
       from: All

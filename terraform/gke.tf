@@ -26,7 +26,7 @@ resource "google_container_node_pool" "main" {
   node_count = 1
 
   node_config {
-    machine_type = "e2-custom-2-4096"
+    machine_type = "e2-custom-2-6144"
 
     service_account = google_service_account.gke_node.email
     # cloud-platform scope lets the node SA use any GCP API that IAM allows.

@@ -110,6 +110,7 @@ gcloud domains registrations register yourdomain.com --project=$PROJECT_ID
    ```bash
    terraform -chdir=terraform import google_dns_managed_zone.main andrewkatsikas-com
    ```
+   > If you see `Error: Resource already managed by Terraform`, the zone is already in state — skip this step.
 10. `make terraform-apply` — provisions cluster, registry, Cloud DNS zone, syncs nameservers
 11. `make gke-all PROJECT_ID=$PROJECT_ID`
     > `gke-deploy` waits for port 80 and DNS before installing cert-manager, so the TLS cert is issued on the first attempt. Monitor progress with:
@@ -185,3 +186,16 @@ kubectl config use-context <name>    # switch
 ```
 
 KIND contexts: `kind-<cluster>`. GKE contexts: `gke_<project>_<zone>_<cluster>`.
+
+---
+
+## Future improvements
+
+### High availability for spot nodes
+
+Currently the cluster runs a single spot node. A spot preemption takes down the entire node (all pods) with ~30s warning, resulting in 3-7 minutes of downtime while a new node provisions.
+
+To make this more resilient:
+- Increase node pool to 2+ nodes
+- Run 2 replicas of Envoy Gateway with pod anti-affinity to ensure they land on different nodes
+- A spot preemption would then only take down one node, with the other continuing to serve traffic
