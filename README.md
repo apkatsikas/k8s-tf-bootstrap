@@ -1,26 +1,29 @@
-# k8s-tf-bootstrap
+# boilerplate-backend
 
-Kubernetes + Terraform bootstrap for a GKE-hosted API with automated DNS and TLS.
+Kubernetes + Terraform boilerplate for a GKE-hosted API with auth, automated DNS, and TLS.
 
-Includes a Node.js app running on Kubernetes with TLS, Gateway API, and Helm. Works locally with KIND and deploys to GKE.
+Includes a Node.js API, Keycloak (auth), and CloudNativePG (Postgres) running on Kubernetes with TLS, Gateway API, and Helm. Works locally with KIND and deploys to GKE.
 
 ---
 
 ## Stack
 
-| Component                                                       | Why                                                                             |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [Envoy Gateway](https://gateway.envoyproxy.io/)                 | Implements the Gateway API                                                      |
-| [cert-manager](https://cert-manager.io/)                        | Automates TLS certificate lifecycle (self-signed locally, Let's Encrypt on GKE) |
-| [external-dns](https://github.com/kubernetes-sigs/external-dns) | Watches HTTPRoute hostnames and creates Cloud DNS records automatically         |
-| [Terraform](https://www.terraform.io/)                          | Provisions GKE cluster, Artifact Registry, Cloud DNS zone, and IAM              |
-| [KIND](https://kind.sigs.k8s.io/)                               | Runs a real Kubernetes cluster locally inside Docker                            |
+| Component                                                                     | Why                                                                             |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [Envoy Gateway](https://gateway.envoyproxy.io/)                               | Implements the Gateway API                                                      |
+| [cert-manager](https://cert-manager.io/)                                      | Automates TLS certificate lifecycle (self-signed locally, Let's Encrypt on GKE) |
+| [external-dns](https://github.com/kubernetes-sigs/external-dns)               | Watches HTTPRoute hostnames and creates Cloud DNS records automatically         |
+| [CloudNativePG](https://cloudnative-pg.io/)                                   | Runs Postgres inside Kubernetes                                                 |
+| [Keycloak](https://www.keycloak.org/)                                         | OIDC auth server                                                                |
+| [Terraform](https://www.terraform.io/)                                        | Provisions GKE cluster, Artifact Registry, Cloud DNS zone, and IAM             |
+| [KIND](https://kind.sigs.k8s.io/)                                             | Runs a real Kubernetes cluster locally inside Docker                            |
 
-Three Helm charts keep concerns separate:
+Four Helm charts keep concerns separate:
 
-- **`charts/infra`** — GatewayClass, Gateway, EnvoyProxy (platform layer)
+- **`charts/infra`** — GatewayClass, Gateway, EnvoyProxy, HTTP→HTTPS redirect (platform layer)
 - **`charts/cert-manager-config`** — ClusterIssuer (installed last on GKE, after LB and DNS are ready)
-- **`charts/api`** — Deployment, Service, HTTPRoutes (application layer)
+- **`charts/api`** — Deployment, Service, ListenerSet, HTTPRoute (application layer)
+- **`charts/auth`** — Keycloak + CloudNativePG Cluster, ListenerSet, HTTPRoute (auth layer)
 
 ---
 
@@ -29,9 +32,10 @@ Three Helm charts keep concerns separate:
 ```
 .
 ├── charts/
-│   ├── infra/                # Platform: GatewayClass, Gateway, EnvoyProxy
+│   ├── infra/                # Platform: GatewayClass, Gateway, EnvoyProxy, redirect
 │   ├── cert-manager-config/  # ClusterIssuer (installed last on GKE)
-│   └── api/                  # App: Deployment, Service, HTTPRoutes
+│   ├── api/                  # App: Deployment, Service, ListenerSet, HTTPRoute
+│   └── auth/                 # Keycloak + CNPG Cluster, ListenerSet, HTTPRoute
 ├── kind-cluster/
 │   └── kind.yaml       # KIND cluster config (port mappings)
 ├── terraform/          # GKE cluster, registry, DNS zone, IAM
@@ -40,6 +44,15 @@ Three Helm charts keep concerns separate:
 ├── helmfile.yaml.gotmpl
 └── Makefile
 ```
+
+Helmfile releases are grouped by deployment phase (`group` label):
+
+| Group | Releases | When |
+|---|---|---|
+| `operators` | cnpg, eg | First — installs CRDs and controllers |
+| `network` | external-dns, infra | After operators — sets up Gateway and DNS |
+| `apps` | api, auth | After network — deploys application workloads |
+| `tls` | cert-manager, cert-manager-config | Last on GKE — after LB and DNS are ready |
 
 ---
 
@@ -61,9 +74,14 @@ Three Helm charts keep concerns separate:
 make all
 ```
 
-Runs in order: creates the KIND cluster → installs Envoy Gateway and cert-manager → installs npm dependencies → builds the Docker image → deploys both charts.
+Runs in order: creates the KIND cluster → fetches chart dependencies → installs platform layer → installs npm dependencies → builds the Docker image → deploys application charts.
 
-Visit `https://api.localhost`. Accept the self-signed cert warning.
+| URL | Service |
+|---|---|
+| `https://api.localhost` | API |
+| `https://auth.localhost/admin` | Keycloak admin console (`admin` / `admin`) |
+
+Accept the self-signed cert warning in your browser.
 
 ### Dev Loop
 
@@ -113,11 +131,13 @@ gcloud domains registrations register yourdomain.com --project=$PROJECT_ID
    > If you see `Error: Resource already managed by Terraform`, the zone is already in state — skip this step.
 10. `make terraform-apply` — provisions cluster, registry, Cloud DNS zone, syncs nameservers
 11. `make gke-all PROJECT_ID=$PROJECT_ID`
-    > `gke-deploy` waits for port 80 and DNS before installing cert-manager, so the TLS cert is issued on the first attempt. Monitor progress with:
+    > `gke-deploy` waits for port 80 and DNS on all hostnames before installing cert-manager, so TLS certs are issued on the first attempt. Monitor progress with:
     >
     > ```bash
     > make gke-status
     > ```
+
+> **Note:** Keycloak admin and database credentials are not yet managed by a secrets manager. They must be supplied before deploying to GKE. This will be addressed in a future iteration.
 
 ### Teardown
 
@@ -145,12 +165,13 @@ The Cloud DNS zone is preserved (`prevent_destroy = true`) — nameservers never
 Browser
   → Cloud LoadBalancer (dynamic IP managed by GKE)
   → Envoy Gateway (TLS termination, envoy-gateway-system namespace)
-  → HTTPRoute (matches hostname → api Service)
+  → ListenerSet (per-service HTTPS listener with cert-manager TLS)
+  → HTTPRoute (matches hostname → Service)
   → Service (ClusterIP, load balances across pods)
   → Pod
 ```
 
-HTTP requests are redirected to HTTPS by a second HTTPRoute on the port 80 listener before reaching the app.
+HTTP requests on port 80 are redirected to HTTPS by a gateway-level HTTPRoute before reaching any app.
 
 ### Request path (KIND)
 
@@ -160,18 +181,22 @@ Browser
   → KIND extraPortMapping (host → KIND node)
   → Envoy hostPort (KIND node → Envoy pod)
   → Gateway (TLS termination)
-  → HTTPRoute → Service → Pod
+  → ListenerSet → HTTPRoute → Service → Pod
 ```
 
 KIND has no cloud load balancer, so `kind-cluster/kind.yaml` maps host ports into the cluster and an `EnvoyProxy` resource bridges them to the Envoy pod using `hostPort`.
 
 ### TLS
 
-cert-manager manages the full certificate lifecycle. Locally it issues a self-signed cert; on GKE it uses Let's Encrypt via HTTP-01 challenge. On GKE, cert-manager is installed last — after port 80 and DNS are confirmed ready — to avoid a bootstrap race where the challenge fires before the load balancer and DNS are available.
+cert-manager manages the full certificate lifecycle. Each service has its own ListenerSet with a dedicated TLS certificate. Locally it issues self-signed certs; on GKE it uses Let's Encrypt via HTTP-01 challenge. On GKE, cert-manager is installed last — after port 80 and all DNS hostnames are confirmed ready — to avoid a bootstrap race where the challenge fires before the load balancer and DNS are available.
 
 ### DNS (GKE)
 
 external-dns watches HTTPRoute hostnames and writes A records to Cloud DNS pointing at the Envoy LoadBalancer IP. No static IP or manual DNS records needed.
+
+### Auth (Keycloak)
+
+Keycloak runs at `auth.<domain>` backed by a CloudNativePG Postgres cluster. It acts as an OIDC provider for the API and any future frontend. The `charts/auth` chart manages the CNPG Cluster, credentials secrets, ListenerSet, and the Keycloak Helm release together.
 
 ---
 
@@ -190,6 +215,10 @@ KIND contexts: `kind-<cluster>`. GKE contexts: `gke_<project>_<zone>_<cluster>`.
 ---
 
 ## Future improvements
+
+### Secrets management
+
+Keycloak admin and database credentials are currently hardcoded for local development. Production deployments need a secrets management solution (ksops, External Secrets Operator, or similar) before going live.
 
 ### High availability for spot nodes
 
